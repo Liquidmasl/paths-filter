@@ -29,6 +29,7 @@ async function run(): Promise<void> {
     const token = core.getInput('token', {required: false})
     const ref = core.getInput('ref', {required: false})
     const base = core.getInput('base', {required: false})
+    const allowRefOverrideInPr = core.getInput('allow-ref-overrides-in-pr', {required: false}) || false
     const filtersInput = core.getInput('filters', {required: true})
     const filtersYaml = isPathInput(filtersInput) ? getConfigFileContent(filtersInput) : filtersInput
     const listFiles = core.getInput('list-files', {required: false}).toLowerCase() || 'none'
@@ -49,7 +50,7 @@ async function run(): Promise<void> {
     const filterConfig: FilterConfig = {predicateQuantifier}
 
     const filter = new Filter(filtersYaml, filterConfig)
-    const files = await getChangedFiles(token, base, ref, initialFetchDepth)
+    const files = await getChangedFiles(token, base, ref, initialFetchDepth, allowRefOverrideInPr)
     core.info(`Detected ${files.length} changed files`)
     const results = filter.match(files)
     exportResults(results, listFiles)
@@ -74,7 +75,7 @@ function getConfigFileContent(configPath: string): string {
   return fs.readFileSync(configPath, {encoding: 'utf8'})
 }
 
-async function getChangedFiles(token: string, base: string, ref: string, initialFetchDepth: number): Promise<File[]> {
+async function getChangedFiles(token: string, base: string, ref: string, initialFetchDepth: number, allowRefOverrideInPr: boolean): Promise<File[]> {
   // if base is 'HEAD' only local uncommitted changes will be detected
   // This is the simplest case as we don't need to fetch more commits or evaluate current/before refs
   if (base === git.HEAD) {
@@ -85,7 +86,7 @@ async function getChangedFiles(token: string, base: string, ref: string, initial
   }
 
   const prEvents = ['pull_request', 'pull_request_review', 'pull_request_review_comment', 'pull_request_target']
-  if (prEvents.includes(github.context.eventName)) {
+  if (prEvents.includes(github.context.eventName) && ~allowRefOverrideInPr) {
     if (ref) {
       core.warning(`'ref' input parameter is ignored when 'base' is set to HEAD`)
     }
